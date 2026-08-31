@@ -52,6 +52,10 @@ def get_clan_id_by_name(name):
     infos = cursor.fetchone()
     return infos[0]
 
+def get_clan_by_id(clan_id):
+    cursor.execute("SELECT * FROM clans_table WHERE clan_id = ?",(clan_id,))
+    return cursor.fetchone()
+
 @bot.event
 async def on_ready():
     sings = await bot.tree.sync()
@@ -75,7 +79,7 @@ async def create_clan(interaction: discord.Interaction, clan_name: str):
 
     infos = get_infos_by_user_id(user_id)
     if infos:
-        cursor.execute("INSERT INTO users_table (clan_id, clan_position) VALUES (?,?)",(clan_id,"OWNER"))
+        cursor.execute("UPDATE users_table SET clan_id = ?, clan_position = ? WHERE user_id = ?",(clan_id,"OWNER",user_id))
     else:
         cursor.execute("INSERT INTO users_table (user_id, clan_id, clan_position) VALUES (?,?,?)",(user_id,clan_id,"OWNER"))
 
@@ -87,7 +91,27 @@ Clan id: {clan_id}
 OWNER name: {interaction.user.name}
 OWNER id: {user_id}
     """)
-    
 
+@bot.tree.command(description = "Delete your clan")
+async def del_clan(interaction: discord.Interaction):
+    infos = get_infos_by_user_id(interaction.user.id)
+    _, _, clan_id, clan_pos = infos
+    if clan_pos != "OWNER":
+        return await interaction.response.send_message("You are't owner of this clan.", ephemeral = True)
+    
+    cursor.execute("DELETE FROM clans_table WHERE id = ?",(clan_id,))
+    cursor.execute("SELECT * FROM users_table WHERE clan_id = ?",(clan_id,))
+    members = cursor.fetchall()
+    for _, user_id, clan_id, clan_pos in members:
+        cursor.execute("UPDATE users_table SET clan_id = ?, clan_position = ? WHERE user_id = ?",(None,None,user_id))
+        connection.commit()
+
+    connection.commit()
+    await interaction.response.send_message("Your clan as deleted with sucess")
+
+@bot.tree.command(description= "Get your clan situation")
+async def situation(interaction: discord.Interaction):
+    infos = get_infos_by_user_id(interaction.user.id)
+    await interaction.response.send_message(f"Infos: {infos}")
 
 bot.run(token)
