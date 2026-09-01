@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 import sqlite3
 import json
-
+from views.invites import invites_ as invites_view
 # Vars
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=".", intents = intents)
@@ -59,7 +59,7 @@ def get_clan_id_by_name(name):
     return infos[0]
 
 def get_clan_by_id(clan_id):
-    cursor.execute("SELECT * FROM clans_table WHERE clan_id = ?",(clan_id,))
+    cursor.execute("SELECT * FROM clans_table WHERE id = ?",(clan_id,))
     return cursor.fetchone()
 
 def has_invited(clan_id, member_id):
@@ -145,9 +145,17 @@ async def situation(interaction: discord.Interaction):
 async def list_invites(interaction: discord.Interaction):
     cursor.execute("SELECT * FROM invites_table WHERE user_id = ?",(interaction.user.id,))
     invites = cursor.fetchall()
-    if invites:
-        await interaction.response.send_message(invites)
-    else:
-        await interaction.response.send_message("You don't have a invitations.")
+    if not invites:
+        return await interaction.response.send_message("You don't have a invitations.")
 
+    view = invites_view(interaction.user, invites)
+    text = "Join in clan:  \n"
+
+    for invite in invites:
+        clan_id = invite[0]
+        clan_infos = get_clan_by_id(clan_id)
+        text += f"{clan_infos[1]} \n"
+
+    await interaction.response.send_message(text, view=view)
+        
 bot.run(token)
