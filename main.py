@@ -29,6 +29,12 @@ clan_name TEXT NOT NULL,
 owner_id INTEGER NOT NULL
 )""")
 
+cursor.execute("""CREATE TABLE IF NOT EXISTS invites_table (
+clan_id INTEGER NOT NULL, 
+user_id INTEGER NOT NULL,
+PRIMARY KEY (clan_id, user_id)
+)""")
+
 connection.commit()
 
 def get_infos_by_user_id(user_id):
@@ -55,6 +61,10 @@ def get_clan_id_by_name(name):
 def get_clan_by_id(clan_id):
     cursor.execute("SELECT * FROM clans_table WHERE clan_id = ?",(clan_id,))
     return cursor.fetchone()
+
+def has_invited(clan_id, member_id):
+    cursor.execute("SELECT * FROM invites_table WHERE clan_id = ? AND user_id = ?",(clan_id,member_id))
+    return cursor.fetchone() is not None
 
 @bot.event
 async def on_ready():
@@ -109,9 +119,35 @@ async def del_clan(interaction: discord.Interaction):
     connection.commit()
     await interaction.response.send_message("Your clan as deleted with sucess")
 
+@bot.tree.command(description="Send a invitation to user")
+async def send_invite(interaction: discord.Interaction, member:discord.Member):
+    infos = get_infos_by_user_id(interaction.user.id)
+    _, _, clan_id, clan_pos = infos
+    if clan_pos != "OWNER" and clan_pos != "SUBOWNER":
+        return await interaction.response.send_message("You are't owner/subowner of this clan.", ephemeral = True)
+
+    if in_clan(member.id):
+        return await interaction.response.send_message("This member already in a clan.")
+
+    if has_invited(clan_id, member.id):
+        return await interaction.response.send_message("This invitation has already been sent.")
+
+    cursor.execute("INSERT INTO invites_table (clan_id, user_id) VALUES (?,?)",(clan_id, member.id))
+    connection.commit()
+    await interaction.response.send_message("Your invite has send with sucess")
+
 @bot.tree.command(description= "Get your clan situation")
 async def situation(interaction: discord.Interaction):
     infos = get_infos_by_user_id(interaction.user.id)
     await interaction.response.send_message(f"Infos: {infos}")
+
+@bot.tree.command(description="List your clans invites")
+async def list_invites(interaction: discord.Interaction):
+    cursor.execute("SELECT * FROM invites_table WHERE user_id = ?",(interaction.user.id,))
+    invites = cursor.fetchall()
+    if invites:
+        await interaction.response.send_message(invites)
+    else:
+        await interaction.response.send_message("You don't have a invitations.")
 
 bot.run(token)
