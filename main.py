@@ -50,7 +50,8 @@ def in_clan(user_id):
     return not clan_id is None
 
 def clan_exist_by_name(name: str):
-    infos = cursor.execute("SELECT * FROM clans_table WHERE clan_name = ?",(name,))
+    cursor.execute("SELECT * FROM clans_table WHERE clan_name = ?",(name,))
+    infos = cursor.fetchone
     return infos is None
 
 def get_clan_id_by_name(name):
@@ -79,7 +80,6 @@ async def on_ready():
 @bot.tree.command(description = "Create a new clan.")
 async def create_clan(interaction: discord.Interaction, clan_name: str):
     user_id = interaction.user.id
-
     user_in_clan = in_clan(user_id)
     if user_in_clan:
         return await interaction.response.send_message("You already are in a clan.") 
@@ -109,7 +109,12 @@ OWNER id: {user_id}
 @bot.tree.command(description = "Delete your clan.")
 async def del_clan(interaction: discord.Interaction):
     infos = get_infos_by_user_id(interaction.user.id)
+    if infos is None:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
     _, _, clan_id, clan_pos = infos
+
+    if not in_clan(interaction.user.id): 
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
 
     if clan_pos != "OWNER":
         return await interaction.response.send_message("You are't owner of this clan.", ephemeral = True)
@@ -128,6 +133,8 @@ async def del_clan(interaction: discord.Interaction):
 @bot.tree.command(description="Send a invitation to user.")
 async def send_invite(interaction: discord.Interaction, member:discord.Member):
     infos = get_infos_by_user_id(interaction.user.id)
+    if infos is None:
+        return await interaction.response.send_message("You aren't in a clan.")
     _, _, clan_id, clan_pos = infos
 
     if clan_pos != "OWNER" and clan_pos != "SUBOWNER":
@@ -146,7 +153,9 @@ async def send_invite(interaction: discord.Interaction, member:discord.Member):
 @bot.tree.command(description= "Get your clan situation.")
 async def situation(interaction: discord.Interaction):
     user_infos = get_infos_by_user_id(interaction.user.id)
-    _, user_id, clan_id, _ = user_infos
+    if user_infos is None:
+        return await interaction.response.send_message("You aren't in a clan.")
+    _, _, clan_id, _ = user_infos
     if clan_id is None:
         return await interaction.response.send_message("You aren't in a clan.")
 
@@ -178,7 +187,14 @@ async def list_invites(interaction: discord.Interaction):
 @bot.tree.command(description = "Promote a user to subowner.")
 async def promote(interaction: discord.Interaction, member:discord.Member):
     user_infos = get_infos_by_user_id(interaction.user.id)
-    _, user_id, user_clan_id, user_clan_pos = user_infos
+    if not user_infos:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
+    
+    _, _, user_clan_id, user_clan_pos = user_infos
+
+    if user_clan_id is None:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
+    
     if not user_clan_pos == "OWNER" and user_clan_pos == "SUBOWNER":
         return await interaction.response.send_message("You aren't owner/subowner of your clan.", ephemeral = True)
 
@@ -195,7 +211,11 @@ async def promote(interaction: discord.Interaction, member:discord.Member):
 @bot.tree.command(description="Remove a member of your clan.")
 async def remove_member(interaction: discord.Interaction, member:discord.Member):
     user_infos = get_infos_by_user_id(interaction.user.id)
-    _, user_id, user_clan_id, user_clan_pos = user_infos
+    if not user_infos:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
+    
+    _, _, user_clan_id, user_clan_pos = user_infos
+
     if not (user_clan_pos == "OWNER" or user_clan_pos == "SUBOWNER"):
         return await interaction.response.send_message("You aren't owner/subowner of your clan.", ephemeral = True)
     
@@ -212,7 +232,25 @@ async def remove_member(interaction: discord.Interaction, member:discord.Member)
     if user_clan_pos == "SUBOWNER" and member_pos == "SUBOWNER":
         return await interaction.response.send_message("You can't remove other subowner.")
     
-    cursor.execute("UPDATE users_table SET clan_position = ?, clan_id WHERE user_id = ?",(None,None,member_id))
+    cursor.execute("UPDATE users_table SET clan_position = ?, clan_id = ? WHERE user_id = ?",(None,None,member_id))
     await interaction.response.send_message(f"The user {member.name} has removed from your clan with sucess.")
 
+@bot.tree.command(description = "Leave the clan")
+async def leave(interaction: discord.Interaction):
+    user_infos = get_infos_by_user_id(interaction.user.id)
+    if not user_infos:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
+    _, user_id, user_clan_id, user_clan_pos = user_infos
+
+    if user_clan_id is None:
+        return await interaction.response.send_message("You aren't in a clan.", ephemeral = True)
+
+    if user_clan_pos == "OWNER":
+        return await interaction.response.send_message("You are an owner of your clan.", ephemeral = True)
+
+    cursor.execute("UPDATE users_table SET clan_position = ?, clan_id = ? WHERE user_id = ?",(None,None,user_id))
+    connection.commit()
+
+    await interaction.response.send_message("You left the clan.", ephemeral = True)
+    
 bot.run(token)
